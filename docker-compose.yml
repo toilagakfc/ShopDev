@@ -1,0 +1,35 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: never
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=mongo123
+      - MONGO_INITDB_DATABASE=shopbadminton
+    ports:
+      - "27017:27017"
+    volumes:
+      - type: volume
+        source: mongodb_data
+        target: /data/db
+
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    restart: never
+    environment:
+      - MYSQL_ROOT_PASSWORD=mysql123
+      - MYSQL_DATABASE=shopbadminton
+      - MYSQL_USER=shopbadminton_user
+      - MYSQL_PASSWORD=mysql123
+    ports:
+      - "3306:3306"
+    volumes:
+      - type: volume
+        source: mysql_data
+        target: /var/lib/mysql
+
+volumes:
+  mongodb_data:
+  mysql_data:

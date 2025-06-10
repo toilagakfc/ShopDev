@@ -1,9 +1,9 @@
 
-const User = require("../../models/user.model");
-const Favorite = require("../../models/favorite.model");
-const ProductVariants = require("../../models/productVariant.model");
-const Products = require("../../models/product.model");
-const ProductImages = require("../../models/productImage.model");
+const User = require("../models/user.model");
+const Favorite = require("../models/favorite.model");
+const ProductVariants = require("../models/productVariant.model");
+const Products = require("../models/product.model");
+const ProductImages = require("../models/productImage.model");
 
 
 // danh sách yêu thích
