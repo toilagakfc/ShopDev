@@ -7,6 +7,8 @@ const {authenticateToken} = require("../../middlewares/authMiddleware");
 
 route.post("/register", asyncHandler(controller.register));
 route.post("/login", asyncHandler(controller.login));
+route.post("/password/forgot", asyncHandler(controller.forgotPassword));
+route.post("/password/verify", asyncHandler(controller.verifyOtp));
 
 //Authentication routes
 route.use(authenticateToken); // Apply authentication middleware to all routes below
@@ -14,7 +16,6 @@ route.use(authenticateToken); // Apply authentication middleware to all routes b
 
 route.post("/logout", asyncHandler(controller.logout));
 route.post("/refresh-token", asyncHandler(controller.refreshToken));
-route.post("/password/forgot", controller.forgotPassword);
 // route.post("/password/otp", controller.otpPassword);
 // route.post("/password/change", authMiddleware.authenticateToken ,controller.changePassword);
 // route.get("/profile", authMiddleware.authenticateToken ,controller.profile);

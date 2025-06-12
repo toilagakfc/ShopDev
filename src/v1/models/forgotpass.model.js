@@ -1,45 +1,38 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/database");
-const User = require("./user.model");
+'use strict';
 
-const ForgotPassword = sequelize.define("ForgotPassword", {
-    id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true
-    },
+const { model, Types,Schema } = require('mongoose');
+const DOCUMENT_NAME = 'ForgotPassword';
+const COLLECTION_NAME = 'ForgotPasswords';
+
+const forgotPasswordSchema = new Schema({
     userId: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-            model: User,
-            key: "id"
-        },
-        onDelete: "CASCADE"
+        type: Schema.Types.ObjectId,
+        required: true,
+        ref: 'User'
     },
-    otp: {
-        type: DataTypes.STRING,
-        allowNull: false
+    opt: {
+        type: String,
+        required: true,
+        unique: true // Ensure each OTP is unique
     },
-    expireAt: {
-        type: DataTypes.DATE,
-        allowNull: false
+    expiresAt: {
+        type: Date,
+        required: true,
+        expires: '15m' // Automatically delete after 15 minutes
     },
     createdAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
+        type: Date,
+        defaultValue: Types.NOW,
     },
     updatedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
+        type: Date,
+        defaultValue: Types.NOW,
     }
-}, {
-    tableName: "forgot_password",
-    timestamps: true
-});
+},    
+    {
+        collection: COLLECTION_NAME,
+        timestamps: true, // Automatically manage createdAt and updatedAt fields
+    }
+    );
 
-// Thiết lập quan hệ
-ForgotPassword.belongsTo(User, { foreignKey: "userId" });
-User.hasMany(ForgotPassword, { foreignKey: "userId" });
-
-module.exports = ForgotPassword;
+module.exports = model(DOCUMENT_NAME, forgotPasswordSchema);

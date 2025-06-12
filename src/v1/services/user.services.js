@@ -2,13 +2,15 @@
 
 const  UserModel  = require('../models/user.model');
 const KeyTokenModel = require('../models/keyToken.model');
+const forgotPassModel = require('../models/forgotpass.model');
 const bcrypt = require('bcrypt');
 const { getInfoData, createKeyPair } = require('../utils');
 const crypto = require('crypto');
 const {ConflictError,BadRequestError,NotFoundError, UnauthorizedError} = require('../core/error.response');
 const KeyTokenService = require('./keyToken.services');
+const forgotPassService = require('./forgotPwd.services');
 const { createTokenPair, verifyToken } = require('../middlewares/authMiddleware');
-const { $where } = require('../models/keyToken.model');
+
 
 class UserService {
     
@@ -129,35 +131,31 @@ class UserService {
     }
 
     static handleRefreshToken = async (refreshToken) => {
-        /*        1. Check if refresh token is provided
-           2. Verify the refresh token
-           3. Check if the user exists
-           4. Create new tokens
-           5. Return new tokens
+        /*        
+            1. Check if refresh token is provided
+            2. Verify the refresh token
+            3. Check if the user exists
+            4. Create new tokens
+            5. Return new tokens
         */
-        // 2. Verify the refresh token
-        // console.log("Refresh Token:", refreshToken);
+
         const keyToken = await KeyTokenService.findrefreshTokenUsed(refreshToken);
-        // console.log("Key Token:", keyToken);
-        
+
         if (keyToken) {
             // delete refresh token used
-            const {email, userId} = await verifyToken(refreshToken, keyToken.publicKey);
-            await KeyTokenService.removeKeyTokenByUserId(userId); 
+            // const {email, userId} = await verifyToken(refreshToken, keyToken.publicKey);
+            // await KeyTokenService.removeKeyTokenByUserId(userId);
+            //get ip request
             throw new UnauthorizedError("Some thing went wrong with refresh token, please login again");
         }
 
         const holderToken = await KeyTokenService.findByRefreshToken(refreshToken);
         if (!holderToken) throw new UnauthorizedError("Refresh token not found");
         const {email, userId} = await verifyToken(refreshToken, holderToken.publicKey);
-        console.log("Email:", email, "User ID:", userId);
 
-        // 4. Create new tokens
         const user = await UserModel.findOne({ email, deleted: 0 }).lean();
         if (!user) throw new NotFoundError("User not found with this email");
         
-        //create new key pair
-        // const { publicKey, privateKey } = createKeyPair();
         const tokens = await createTokenPair(
             {
                 userId,
@@ -165,19 +163,23 @@ class UserService {
             },
             holderToken.publicKey,
             holderToken.privateKey
-        );        // 5. Update holderToken with new public key, private key and refreshToken and add refreshToken to refreshTokenUsed
-        await KeyTokenModel.findOneAndUpdate(
-            { _id: holderToken._id },
-            {   
-                $set: {
-                    refreshToken: tokens.refreshToken
-                },
-                $addToSet: { 
-                    refreshTokenUsed: refreshToken 
-                }
-            },
-            { new: true }
-        )
+        );        
+        // Update key token with new refreshToken
+        if (!tokens.refreshToken) throw new BadRequestError("Failed to create refresh token");
+        // Update the key token with the new refresh token
+        await KeyTokenService.updateRefreshToken(holderToken._id, tokens.refreshToken, refreshToken);
+        // await KeyTokenModel.findOneAndUpdate(
+        //     { _id: holderToken._id },
+        //     {   
+        //         $set: {
+        //             refreshToken: tokens.refreshToken
+        //         },
+        //         $addToSet: { 
+        //             refreshTokenUsed: refreshToken 
+        //         }
+        //     },
+        //     { new: true }
+        // )
 
         return {
             user: getInfoData({ fields: ['_id', 'fullname', 'email', 'address', 'phone'], object: user }),
@@ -186,26 +188,77 @@ class UserService {
     }
 
     static forgotPassword = async (email) => {
-        // 1. Check if user exists
+        /*
+        1. Check if user exists
+        2. Generate OTP (One Time Password)
+        3. Save OTP to forgotPassModel with userId and expiration time
+        4. Send OTP to user's email
+        5. Return success message
+         */
         const user = await UserModel.findOne({ email, deleted: 0 }).lean();
         if (!user) throw new NotFoundError("User not found with this email");
-        // 2. Generate reset password token
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        // 3. Save reset token to user
-        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-        const updatedUser = await UserModel.findOneAndUpdate(
-            { _id: user._id },
-            { resetPasswordToken: resetTokenHash, resetPasswordExpires: Date.now() + 3600000 }, // 1 hour expiration
-            { new: true }
-        ).lean();
-        console.log("Updated User:", updatedUser);
-        if (!updatedUser) throw new BadRequestError("Failed to update user with reset token");
-        // 4. Send reset password email
-        // Here you would typically send an email with the reset token
-        console.log(`Reset password token for ${email}: ${resetToken}`);
+        // 2. Generate OTP 6digit
+        const otp = crypto.randomInt(100000, 999999).toString(); // Generate a random 6-digit OTP
+        // 3. Save OTP to forgotPassModel with userId and expiration time
+        const expiresAt = new Date(Date.now() + 15 ); // 15 minutes expiration
+        const forgotPass = await forgotPassService.createForgotPass({ userId: user._id, otp, expiresAt });
+        if (!forgotPass) throw new BadRequestError("Failed to create forgot password entry");
+        // 4. Send OTP to user's email
+        // Here you would typically send an email with the OTP
+        console.log(`OTP for ${email}: ${forgotPass.opt}`);
+        // await forgotPassService.sendForgotPasswordEmail(email, otp);
+        // 5. Return success message
         return {
-            message: "Reset password token sent to your email",
-            resetToken
+            message: "OTP sent to your email",
+            otp,
+            expiresAt
+        }
+    }
+
+    static verifyOtp = async ({email, otp}) => {
+        /*
+        1. Check if user exists
+        2. Verify OTP from forgotPassModel
+        3. If OTP is valid, return success message
+         */
+        const user = await UserModel.findOne({ email, deleted: 0 }).lean();
+        if (!user) throw new NotFoundError("User not found with this email");
+        
+        // 2. Verify OTP from forgotPassModel
+        const {userId} = await forgotPassService.verifyOtp(user._id, otp);
+        
+        //tạo key token
+        const { publicKey, privateKey } = createKeyPair();
+        const keyStoreString = await KeyTokenService.createKeyToken({
+            userId, 
+            publicKey,
+            privateKey
+        });
+        if (!keyStoreString) {
+            throw new BadRequestError("Failed to create key token");
+        }
+        const keyStoreObject = crypto.createPublicKey(keyStoreString)
+        // 3. Create tokens
+        const tokens = await createTokenPair(
+            {
+                userId,
+                email: user.email
+            },
+            keyStoreObject,
+            privateKey
+        );
+        // Update key token with refreshToken
+        await KeyTokenModel.findOneAndUpdate(
+            { userId },
+            { refreshToken: tokens.refreshToken },
+            { new: true }
+        );
+        // 4. Remove forgotPassModel entry
+        await forgotPassModel.findOneAndDelete({ userId, opt: otp }).lean();
+
+        // 3. If OTP is valid, return success message
+        return {
+            message: "OTP verified successfully"
         }
     }
 }
