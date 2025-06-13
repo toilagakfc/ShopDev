@@ -58,6 +58,13 @@ class UserController  {
             data: await UserService.verifyOtp(req.body)
         }).send(res);
     }
+
+    changePassword = async (req, res, next) => {
+        new SuccessResponse({
+            message: "Đổi mật khẩu thành công!",
+            data: await UserService.changePassword(req.user.userId, req.body)
+        }).send(res);
+    }
 }
 
 module.exports = new UserController();

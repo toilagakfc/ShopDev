@@ -16,8 +16,7 @@ route.use(authenticateToken); // Apply authentication middleware to all routes b
 
 route.post("/logout", asyncHandler(controller.logout));
 route.post("/refresh-token", asyncHandler(controller.refreshToken));
-// route.post("/password/otp", controller.otpPassword);
-// route.post("/password/change", authMiddleware.authenticateToken ,controller.changePassword);
+// route.post("/password/reset", authMiddleware.authenticateToken ,controller.changePassword);
 // route.get("/profile", authMiddleware.authenticateToken ,controller.profile);
 // route.patch("/updateProfile", authMiddleware.authenticateToken,controller.updateProfile);
 // route.get("/account", authMiddleware.authenticateToken ,controller.getAccount);

@@ -4,17 +4,6 @@ const KeyTokenModel = require('../models/keyToken.model');
 const {} = require('../core/error.response');
 class KeyTokenService {
     static async createKeyToken({userId, publicKey, privateKey, refreshToken}) {
-        // const publicKeyString = publicKey.toString();
-        // const token = await KeyTokenModel.create({
-        //     userId,
-        //     publicKey: publicKeyString
-
-        // });
-        // if (!token) {
-        //     throw new Error("Failed to create key token");
-        // }
-        
-        // return token ? token.publicKey : null;
         const filter = { userId },       update = {
                 publicKey,
                 privateKey, // Assuming privateKey is not provided here

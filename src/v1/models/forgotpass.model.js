@@ -10,29 +10,25 @@ const forgotPasswordSchema = new Schema({
         required: true,
         ref: 'User'
     },
-    opt: {
+    otp: {
         type: String,
-        required: true,
-        unique: true // Ensure each OTP is unique
+        required: true
     },
     expiresAt: {
         type: Date,
-        required: true,
-        expires: '15m' // Automatically delete after 15 minutes
+        required: true
     },
-    createdAt: {
-        type: Date,
-        defaultValue: Types.NOW,
+    attempts: {
+        type: Number,
+        default: 0
     },
-    updatedAt: {
-        type: Date,
-        defaultValue: Types.NOW,
-    }
-},    
-    {
-        collection: COLLECTION_NAME,
-        timestamps: true, // Automatically manage createdAt and updatedAt fields
-    }
-    );
+    used: {
+        type: Boolean,
+        default: false
+    },
+}, {
+    timestamps: true,
+    collection: COLLECTION_NAME
+});
 
 module.exports = model(DOCUMENT_NAME, forgotPasswordSchema);

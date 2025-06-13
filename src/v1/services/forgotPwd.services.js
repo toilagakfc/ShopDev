@@ -11,14 +11,43 @@ class ForgotPassService {
         if (!userId || !otp) {
             throw new BadRequestError("User ID and OTP are required");
         }
-
+        
         const forgotPassData = {
             userId,
-            opt: otp,
+            otp: otp,
             expiresAt: new Date(Date.now() + EXPIRED) // 15 minutes from now
         };
 
-        return await ForgotPassModel.create(forgotPassData);
+        return await ForgotPassModel.create(forgotPassData)
+    }
+
+    static async otpCleanUp({userId}) {
+        return await ForgotPassModel.deleteMany({
+            userId,
+            expiresAt: { $lt: new Date() }
+        })
+    }
+
+    static async getForgotPassByUserId({userId}) {
+        return await ForgotPassModel.findOne({ 
+            userId,
+            expiresAt: { $gt: new Date() },
+            createdAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) } // 5 minutes ago
+        }).lean();
+    }
+
+    static async updateForgotPassAttempts(userId, otp) {
+        if (!userId || !otp) {
+            throw new BadRequestError("User ID and OTP are required");
+        }
+
+        const forgotPass = await ForgotPassModel.findOne({ userId, opt: otp }).lean();
+        if (!forgotPass) {
+            throw new NotFoundError("Forgot password entry not found");
+        }
+
+        forgotPass.attempts += 1;
+        return await forgotPass.save();
     }
 
     static async sendForgotPasswordEmail(email, otp) {
@@ -37,16 +66,21 @@ class ForgotPassService {
             throw new BadRequestError("User ID and OTP are required");
         }
 
-        const forgotPass = await ForgotPassModel.findOne({ userId, opt: otp }).lean();
-        if (!forgotPass) {
-            throw new NotFoundError("Invalid OTP or User ID");
-        }
+        // const forgotUser = await ForgotPassModel.findOne({ userId, opt: otp }).lean();
+        // if (!forgotUser) {
+        //     throw new NotFoundError("Invalid OTP or User ID");
+        // }
 
-        if (new Date() > forgotPass.expiresAt) {
-            throw new BadRequestError("OTP has expired");
-        }
+        // if (new Date() > forgotUser.expiresAt) {
+        //     throw new BadRequestError("OTP has expired");
+        // }
 
-        return true;
+        // return true;
+        return await ForgotPassModel.findOne({ userId, opt: otp }).lean()
+    }
+
+    static async deleteForgotPassByUserId(userId) {
+        return await ForgotPassModel.findOneAndDelete({ userId }).lean();
     }
 }
 

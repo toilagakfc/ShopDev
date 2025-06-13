@@ -1,7 +1,6 @@
 'use strict'
 
 const  UserModel  = require('../models/user.model');
-const KeyTokenModel = require('../models/keyToken.model');
 const forgotPassModel = require('../models/forgotpass.model');
 const bcrypt = require('bcrypt');
 const { getInfoData, createKeyPair } = require('../utils');
@@ -22,6 +21,7 @@ class UserService {
             throw new BadRequestError("All fields are required");
         }
         const existingUser = await UserModel.findOne({ email , deleted:0, status:1 }).lean();
+        console.log("Existing User:", existingUser);
         if (existingUser) {
             throw new ConflictError("User already exists with this email");
         }
@@ -164,22 +164,10 @@ class UserService {
             holderToken.publicKey,
             holderToken.privateKey
         );        
-        // Update key token with new refreshToken
         if (!tokens.refreshToken) throw new BadRequestError("Failed to create refresh token");
+
         // Update the key token with the new refresh token
         await KeyTokenService.updateRefreshToken(holderToken._id, tokens.refreshToken, refreshToken);
-        // await KeyTokenModel.findOneAndUpdate(
-        //     { _id: holderToken._id },
-        //     {   
-        //         $set: {
-        //             refreshToken: tokens.refreshToken
-        //         },
-        //         $addToSet: { 
-        //             refreshTokenUsed: refreshToken 
-        //         }
-        //     },
-        //     { new: true }
-        // )
 
         return {
             user: getInfoData({ fields: ['_id', 'fullname', 'email', 'address', 'phone'], object: user }),
@@ -190,28 +178,50 @@ class UserService {
     static forgotPassword = async (email) => {
         /*
         1. Check if user exists
-        2. Generate OTP (One Time Password)
-        3. Save OTP to forgotPassModel with userId and expiration time
-        4. Send OTP to user's email
-        5. Return success message
+        2. Check if user already has active OTP
+        3. Generate OTP (One Time Password)
+        4. Save OTP to forgotPassModel with userId and expiration time
+        5. Send OTP to user's email
+        6. Return success message
          */
         const user = await UserModel.findOne({ email, deleted: 0 }).lean();
         if (!user) throw new NotFoundError("User not found with this email");
-        // 2. Generate OTP 6digit
-        const otp = crypto.randomInt(100000, 999999).toString(); // Generate a random 6-digit OTP
-        // 3. Save OTP to forgotPassModel with userId and expiration time
-        const expiresAt = new Date(Date.now() + 15 ); // 15 minutes expiration
-        const forgotPass = await forgotPassService.createForgotPass({ userId: user._id, otp, expiresAt });
+
+        // Check if user already has active OTP
+        const existingOTP = await forgotPassService.getForgotPassByUserId( {userId: user._id });
+        if (existingOTP) {
+            const timeLeft = Math.ceil((existingOTP.expiresAt - Date.now()) / 1000 / 60);
+            throw new BadRequestError(`Please wait ${timeLeft} minutes before requesting a new OTP`);
+        }
+
+        // // Count OTP requests in the last hour
+        // const otpRequestsLastHour = await forgotPassService.count({
+        //     userId: user._id,
+        //     createdAt: { $gt: new Date(Date.now() - 60 * 60 * 1000) } // Last hour
+        // });
+
+        // if (otpRequestsLastHour >= 5) {
+        //     throw new BadRequestError("Too many OTP requests. Please try again after an hour");
+        // }
+
+        // Generate OTP 6digit
+        const otp = crypto.randomInt(100000, 999999).toString();
+        console.log( "OTP: ",otp)
+        // Save OTP to forgotPassModel with userId and expiration time
+        const forgotPass = await forgotPassService.createForgotPass({ userId: user._id, otp});
+        
         if (!forgotPass) throw new BadRequestError("Failed to create forgot password entry");
-        // 4. Send OTP to user's email
+
+        // Clean up expired OTPs for this user
+        await forgotPassService.otpCleanUp({ userId: user._id });
+
+        // Send OTP to user's email
         // Here you would typically send an email with the OTP
-        console.log(`OTP for ${email}: ${forgotPass.opt}`);
+        console.log(`OTP for ${email}: ${forgotPass.otp}`);
         // await forgotPassService.sendForgotPasswordEmail(email, otp);
-        // 5. Return success message
+
         return {
             message: "OTP sent to your email",
-            otp,
-            expiresAt
         }
     }
 
@@ -225,40 +235,63 @@ class UserService {
         if (!user) throw new NotFoundError("User not found with this email");
         
         // 2. Verify OTP from forgotPassModel
-        const {userId} = await forgotPassService.verifyOtp(user._id, otp);
-        
-        //tạo key token
-        const { publicKey, privateKey } = createKeyPair();
-        const keyStoreString = await KeyTokenService.createKeyToken({
-            userId, 
-            publicKey,
-            privateKey
-        });
-        if (!keyStoreString) {
-            throw new BadRequestError("Failed to create key token");
+        const forgotUser = await forgotPassService.verifyOtp(user._id, otp);
+        if (!forgotUser) {
+            throw new NotFoundError("Invalid OTP or User ID");
         }
-        const keyStoreObject = crypto.createPublicKey(keyStoreString)
-        // 3. Create tokens
+        // Check if OTP has expired
+        if (new Date() > forgotUser.expiresAt) {
+            throw new BadRequestError("OTP has expired");
+        }
+          
+        // Check if user has a key token
+        const holderToken = await KeyTokenService.getKeyTokenByUserId(user._id);
+
         const tokens = await createTokenPair(
             {
-                userId,
+                userId: user._id,
                 email: user.email
             },
-            keyStoreObject,
-            privateKey
-        );
-        // Update key token with refreshToken
-        await KeyTokenModel.findOneAndUpdate(
-            { userId },
-            { refreshToken: tokens.refreshToken },
-            { new: true }
-        );
-        // 4. Remove forgotPassModel entry
-        await forgotPassModel.findOneAndDelete({ userId, opt: otp }).lean();
+            holderToken.publicKey,
+            holderToken.privateKey
+        ); 
+        
+        if (!tokens.refreshToken) throw new BadRequestError("Failed to create refresh token");
 
-        // 3. If OTP is valid, return success message
+        // Update the key token with the new refresh token
+        await KeyTokenService.updateRefreshToken(holderToken._id, tokens.refreshToken, holderToken.refreshToken);
+
+        // 4. Remove forgotPassModel entry
+        await forgotPassService.deleteForgotPassByUserId(user._id);
+
         return {
-            message: "OTP verified successfully"
+            message: "OTP verified successfully",
+            user: getInfoData({ fields: ['_id', 'fullname', 'email', 'address', 'phone'], object: user }),
+            tokens
+        }
+    }
+
+    static resetPassword = async ({ email, newPassword }) => {
+        /*
+        1. Check if user exists
+        2. Hash new password
+        3. Update user password in UserModel
+        4. Return success message
+         */
+        const user = await UserModel.findOne({ email, deleted: 0 }).lean();
+        if (!user) throw new NotFoundError("User not found with this email");
+        
+        // 2. Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        
+        // 3. Update user password in UserModel
+        const updatedUser = await UserModel.findByIdAndUpdate(user._id, { password: hashedPassword }, { new: true }).lean();
+        if (!updatedUser) throw new BadRequestError("Failed to update password");
+        
+        // 4. Return success message
+        return {
+            message: "Password reset successfully",
+            user: getInfoData({ fields: ['_id', 'fullname', 'email', 'address', 'phone'], object: updatedUser })
         }
     }
 }
