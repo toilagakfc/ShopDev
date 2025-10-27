@@ -21,7 +21,7 @@ class UserService {
             throw new BadRequestError("All fields are required");
         }
         const existingUser = await UserModel.findOne({ email , deleted:0, status:1 }).lean();
-        console.log("Existing User:", existingUser);
+        // console.log("Existing User:", existingUser);
         if (existingUser) {
             throw new ConflictError("User already exists with this email");
         }
@@ -124,7 +124,7 @@ class UserService {
         
         // 2. Remove key token
         const result = await KeyTokenService.removeKeyTokenByUserId(user._id);
-        console.log("Key Token removed:", result);
+        // console.log("Key Token removed:", result);
         if (!result) throw new BadRequestError("Failed to logout user");
         
         return 
@@ -206,7 +206,7 @@ class UserService {
 
         // Generate OTP 6digit
         const otp = crypto.randomInt(100000, 999999).toString();
-        console.log( "OTP: ",otp)
+        // console.log( "OTP: ",otp)
         // Save OTP to forgotPassModel with userId and expiration time
         const forgotPass = await forgotPassService.createForgotPass({ userId: user._id, otp});
         
@@ -217,7 +217,7 @@ class UserService {
 
         // Send OTP to user's email
         // Here you would typically send an email with the OTP
-        console.log(`OTP for ${email}: ${forgotPass.otp}`);
+        // console.log(`OTP for ${email}: ${forgotPass.otp}`);
         // await forgotPassService.sendForgotPasswordEmail(email, otp);
 
         return {

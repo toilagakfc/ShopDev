@@ -15,10 +15,12 @@ const userSchema = new Schema( {
         length: 100,
         trim: true,
         unique: true,
+        required: true,
     },
     password: {
         type: String,
         allowNull: false,
+        required: true,
     },
     address: {
         type: String,
@@ -80,14 +82,6 @@ const userSchema = new Schema( {
     deleted: {
         type: Boolean,
         defaultValue: false, 
-    },
-    createdAt: {
-        type: Date,
-        defaultValue: Types.NOW,
-    },
-    updatedAt: {
-        type: Date,
-        defaultValue: Types.NOW,
     },
     deletedAt: {
         type: Date,

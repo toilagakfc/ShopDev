@@ -24,7 +24,7 @@ const createTokenPair = async (payload,publicKey,privateKey) => {
         jwt.verify(accessToken, publicKey, (err, decoded) => {
             if (err) {
                 // throw new Error("Access token verification failed: " + err.message);
-                console.error("Access token verification failed:", err.message);
+                // console.error("Access token verification failed:", err.message);
             }
             // console.log("Access token decoded:", decoded);
         })
@@ -47,9 +47,9 @@ const authenticateToken = asyncHandler( async (req, res, next) => {
     
     const userId = req.headers[HEADER.CLIENT_ID];
     if (!userId) throw new NotFoundError("Client ID is required in headers");
-    console.log("Client ID:", userId);
+    // console.log("Client ID:", userId);
     const accessToken = req.headers[HEADER.AUTHORIZATION]; // Lấy token từ "Bearer <token>"
-    console.log("Access Token:", accessToken);
+    // console.log("Access Token:", accessToken);
     if (!accessToken) throw new NotFoundError("No authentication token provided");
     try {
         const keyToken = await getKeyTokenByUserId(userId);
@@ -60,7 +60,7 @@ const authenticateToken = asyncHandler( async (req, res, next) => {
         req.keyToken = keyToken;
         return next();
     } catch (error) {
-        console.error("Token verification error:", error.message);
+        // console.error("Token verification error:", error.message);
         throw new Error("Invalid or expired token");
     }
 })
